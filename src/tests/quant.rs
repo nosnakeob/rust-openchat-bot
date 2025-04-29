@@ -1,14 +1,15 @@
 use crate::config::BaseConfig;
-use crate::models::q_qwen2::Which;
+use crate::models::q_llama::Which;
 use crate::models::HubInfo;
 use crate::tests::{gen_next_token, str2tokens};
 use crate::utils::load::load_logits_processor;
 use anyhow::{Error, Result};
+use candle::Tensor;
 use candle_examples::token_output_stream::TokenOutputStream;
-use candle_transformers::models::quantized_qwen2::ModelWeights;
+use candle_transformers::models::quantized_llama::ModelWeights;
 use hf_chat_template::ChatContext;
-use std::io::Write;
-use std::{env, io};
+use std::env;
+use std::io::{self, Write};
 
 #[tokio::test]
 async fn test_tokenizer() -> Result<()> {
@@ -16,7 +17,7 @@ async fn test_tokenizer() -> Result<()> {
     println!("{:?}", config);
 
     let tokenizer = config.setup_tokenizer().await?;
-    // println!("{:#?}", tokenizer.get_added_vocabulary());
+    println!("{:#?}", tokenizer.get_added_vocabulary());
 
     // token -> id
     let eos_token = config.which.info().eos_token;
@@ -28,17 +29,8 @@ async fn test_tokenizer() -> Result<()> {
         tokenizer.id_to_token(eos_id).unwrap(),
     );
 
-    let tokens = [
-        103942, 73670, 3837, 112735, 113195, 102936, 101036, 11319, 87752, 99639, 97084, 103358,
-        48443, 144236, 84141, 106, 48738, 198, 144185, 48840, 239, 61138, 198, 144736, 8908, 227,
-        117, 56652, 48738, 198, 144251, 10236, 230, 109, 63109, 198, 136879, 38433, 104, 100979,
-        105626, 198, 144538, 6567, 223, 233, 99242, 101047, 99396, 107261, 198, 144927, 90476, 251,
-        77598, 198, 145048, 4891, 241, 255, 103738, 198, 144848, 68739, 115, 109959, 198, 144656,
-        40666, 100, 48738, 198, 145379, 18137, 248, 122, 38182, 198, 145491, 86009, 101265, 271,
-        102056, 18830, 100398, 104378, 100631, 103945, 108086, 3837, 73670, 106525, 104170, 6313,
-        151645,
-    ];
-    println!("{}", tokenizer.decode(&tokens, true).map_err(Error::msg)?);
+    let tokens = [128011, 57668, 53901, 128012, 128013, 198];
+    println!("{}", tokenizer.decode(&tokens, false).map_err(Error::msg)?);
     // 单个token-/>字符
     tokens.iter().for_each(|t| {
         print!("{}", tokenizer.decode(&[*t], true).unwrap());
@@ -83,6 +75,7 @@ async fn test_prompt() -> Result<()> {
     let to_sample = config.sample_len.saturating_sub(1);
 
     let prompts = vec![
+        // "你好",
         "我是snake，你给我记住了",
         "还记得我是谁吗",
         "你是谁",
@@ -95,6 +88,7 @@ async fn test_prompt() -> Result<()> {
         let prompt = ctx.render()?;
         // println!("prompt: {}", prompt);
         ctx_tokens = str2tokens(&prompt, tos.tokenizer())?;
+        // println!("{:?}", ctx_tokens);
 
         let start = std::time::Instant::now();
 
@@ -110,6 +104,7 @@ async fn test_prompt() -> Result<()> {
         let ans_start_idx = ctx_tokens.len();
         ctx_tokens.push(next_token);
 
+        // print!("{next_token} ");
         if let Some(t) = tos.next_token(next_token)? {
             print!("{}", t);
             answer.push_str(&t);
@@ -128,6 +123,7 @@ async fn test_prompt() -> Result<()> {
             )?;
             ctx_tokens.push(next_token);
 
+            // print!("{next_token} ");
             if let Some(t) = tos.next_token(next_token)? {
                 print!("{}", t);
                 answer.push_str(&t);
@@ -163,4 +159,3 @@ async fn test_prompt() -> Result<()> {
     }
     Ok(())
 }
-
